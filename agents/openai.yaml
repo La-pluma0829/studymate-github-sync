@@ -1,0 +1,6 @@
+interface:
+  display_name: "StudyMate GitHub 进度同步"
+  short_description: "在 StudyMate 更新学习记录后，将本人进度摘要增量同步到团队私有仓库首页。"
+  default_prompt: "使用 $studymate-github-sync，将本次 StudyMate 学习进度同步到已授权的私有仓库，保留队友修改。"
+policy:
+  allow_implicit_invocation: true
