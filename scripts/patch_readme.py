@@ -10,9 +10,12 @@ def cell(value):
 
 
 def patch(source, summary):
+    if not isinstance(summary, dict):
+        raise ValueError('Summary must be a JSON object')
     for key in ('username', 'role', 'current', 'learned', 'next'):
         if not isinstance(summary.get(key), str) or not summary[key].strip():
             raise ValueError('Missing nonempty string: ' + key)
+    newline_style = '\r\n' if '\r\n' in source else '\n'
     username = summary['username']
     if not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?', username):
         raise ValueError('Invalid GitHub username')
@@ -47,7 +50,9 @@ def patch(source, summary):
         pattern = re.compile(r'^' + re.escape(heading) + r'[ \t]*\n.*?(?=^#{1,3} |^> |\Z)', re.M | re.S)
         if len(list(pattern.finditer(result))) != 1:
             raise ValueError('Expected exactly one member detail section')
-        result = pattern.sub(lambda m: detail.rstrip() + '\n\n', result, count=1)
+        detail = detail.replace('\r\n', '\n').replace('\r', '\n').rstrip()
+        detail = detail.replace('\n', newline_style) + newline_style * 2
+        result = pattern.sub(lambda m: detail, result, count=1)
     return result
 
 
@@ -59,12 +64,14 @@ def main():
     args = parser.parse_args()
     if args.output.resolve() in (args.readme.resolve(), args.summary.resolve()):
         parser.error('Output must be a separate proposed file')
-    source = args.readme.read_text(encoding='utf-8')
+    with args.readme.open(encoding='utf-8', newline='') as handle:
+        source = handle.read()
     try:
-        result = patch(source, json.loads(args.summary.read_text(encoding='utf-8')))
+        result = patch(source, json.loads(args.summary.read_text(encoding='utf-8-sig')))
     except (ValueError, KeyError, IndexError) as exc:
         parser.error(str(exc))
-    args.output.write_text(result, encoding='utf-8')
+    with args.output.open('w', encoding='utf-8', newline='') as handle:
+        handle.write(result)
     print('unchanged' if result == source else 'proposed local patch written')
 
 
