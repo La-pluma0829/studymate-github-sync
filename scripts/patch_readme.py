@@ -2,19 +2,20 @@
 import argparse
 import json
 import re
+import html
+from sync_policy import validate_summary
 from pathlib import Path
 
 
 def cell(value):
-    return value.replace('|', '&#124;').replace('\r', ' ').replace('\n', ' ').strip()
+    value = html.escape(value, quote=False).strip()
+    for char in ('[', ']', '`', '*', '_', '!'):
+        value = value.replace(char, '&#' + str(ord(char)) + ';')
+    return value.replace('|', '&#124;')
 
 
 def patch(source, summary):
-    if not isinstance(summary, dict):
-        raise ValueError('Summary must be a JSON object')
-    for key in ('username', 'role', 'current', 'learned', 'next'):
-        if not isinstance(summary.get(key), str) or not summary[key].strip():
-            raise ValueError('Missing nonempty string: ' + key)
+    validate_summary(summary)
     newline_style = '\r\n' if '\r\n' in source else '\n'
     username = summary['username']
     if not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?', username):
@@ -42,16 +43,17 @@ def patch(source, summary):
     if old_cells != [cell(summary[k]) for k in ('role', 'current', 'learned', 'next')]:
         lines[index] = row + newline
     result = ''.join(lines)
-    if 'detail' in summary:
-        detail = summary['detail']
-        heading = '### ' + username + ' · 阶段记录'
-        if not isinstance(detail, str) or not detail.startswith(heading + '\n'):
-            raise ValueError('detail must start with member stage heading')
-        pattern = re.compile(r'^' + re.escape(heading) + r'[ \t]*\n.*?(?=^#{1,3} |^> |\Z)', re.M | re.S)
-        if len(list(pattern.finditer(result))) != 1:
-            raise ValueError('Expected exactly one member detail section')
-        detail = detail.replace('\r\n', '\n').replace('\r', '\n').rstrip()
-        detail = detail.replace('\n', newline_style) + newline_style * 2
+    # Regenerate only an existing personal section from the same safe fields.
+    heading = '### ' + username + ' · 阶段记录'
+    pattern = re.compile(r'^' + re.escape(heading) + r'[ \t]*\r?\n.*?(?=^#{1,3} |^> |\Z)', re.M | re.S)
+    matches = list(pattern.finditer(result))
+    if len(matches) > 1:
+        raise ValueError('Duplicate personal stage sections')
+    if matches:
+        detail = heading + newline_style * 2
+        detail += '- **正在学习**：' + cell(summary['current']) + newline_style
+        detail += '- **已学概览**：' + cell(summary['learned']) + newline_style
+        detail += '- **下一步**：' + cell(summary['next']) + newline_style * 2
         result = pattern.sub(lambda m: detail, result, count=1)
     return result
 

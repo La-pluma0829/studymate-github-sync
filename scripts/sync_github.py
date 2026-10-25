@@ -10,6 +10,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from patch_readme import patch
+from sync_policy import (PolicyError, validate_summary, load_state, state_lock,
+                         check_auto, revision, atomic_json)
 
 
 class SyncError(Exception):
@@ -50,6 +52,10 @@ def read_content(repo, branch, path, api):
 
 
 def synchronize(repo, branch, path, username, summary, apply=False, expected_sha=None, api=gh_api):
+    try:
+        validate_summary(summary)
+    except ValueError as exc:
+        raise SyncError(str(exc)) from None
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
         raise SyncError('Repository must be owner/name')
     if not branch or branch.startswith('-') or not path or path.startswith('/') or '..' in path.split('/'):
@@ -91,22 +97,57 @@ def synchronize(repo, branch, path, username, summary, apply=False, expected_sha
             'url': 'https://github.com/' + repo + '/blob/' + quote(branch, safe='') + '/' + quote(path, safe='/')}
 
 
+def automatic_sync(state_path, event, summary, api=gh_api):
+    # This lock serializes local controls and automatic writes, including on Windows.
+    with state_lock(state_path):
+        state = load_state(state_path)
+        status, current = check_auto(state, event, summary)
+        if status != 'ready':
+            if status == 'local_only':
+                state['last_seen_revision'] = current
+                atomic_json(state_path, state)
+            return {'status': status}
+        args = (state['repo'], state['branch'], state['path'], state['username'], summary)
+        preview = synchronize(*args, api=api)
+        if revision(state) != current:
+            raise SyncError('Formal progress changed while preparing; regenerate safe summary')
+        if preview['status'] == 'unchanged':
+            result = preview
+        else:
+            result = synchronize(*args, apply=True, expected_sha=preview['sha'], api=api)
+        state['last_seen_revision'] = current
+        state['last_commit'] = result.get('commit', state.get('last_commit'))
+        atomic_json(state_path, state)
+        return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--repo', required=True)
+    parser.add_argument('--repo')
     parser.add_argument('--branch', default='main')
     parser.add_argument('--path', default='README.md')
-    parser.add_argument('--username', required=True)
+    parser.add_argument('--username')
     parser.add_argument('--summary', required=True, type=Path)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--expected-sha')
+    parser.add_argument('--auto', action='store_true')
+    parser.add_argument('--state', type=Path)
+    parser.add_argument('--event', type=Path)
     args = parser.parse_args()
-    if args.apply and not args.expected_sha:
-        parser.error('--apply requires the SHA returned by a fresh preview')
+    if args.auto and (not args.state or not args.event or args.apply or args.repo or args.username):
+        parser.error('--auto requires --state and --event; use the configured target, not --apply/repo/username')
+    if not args.auto and (not args.repo or not args.username):
+        parser.error('Manual mode requires --repo and --username')
+    if args.apply:
+        parser.error('Standalone --apply is disabled; use --auto with configured state and a formal event')
     try:
         summary = json.loads(args.summary.read_text(encoding='utf-8-sig'))
-        result = synchronize(args.repo, args.branch, args.path, args.username, summary,
-                             args.apply, args.expected_sha)
+        if args.auto:
+            event = json.loads(args.event.read_text(encoding='utf-8-sig'))
+            result = automatic_sync(args.state, event, summary)
+        else:
+            result = synchronize(args.repo, args.branch, args.path, args.username, summary,
+                                 args.apply, args.expected_sha)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except (SyncError, ValueError, OSError) as exc:
         print('Not synchronized: ' + str(exc), file=sys.stderr)
