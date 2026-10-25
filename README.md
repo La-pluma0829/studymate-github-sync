@@ -8,9 +8,24 @@
 
 ## 它做什么
 
-这是 [Study-Mate](https://github.com/Miaotofu01/Study-Mate) 的配套技能，独立开发，未修改或打包上游插件。读取正式学习进度与练习证据，为本人生成“当前正在学 / 已学概览 / 下一步”，增量更新团队私有仓库 README。
+这是 [Study-Mate](https://github.com/Miaotofu01/Study-Mate) 的独立配套技能。首次授权本科目和团队私有库后，StudyMate 正式进度变化会触发本人摘要自动同步；正常学习不用逐次确认上传。普通聊天和排错原文不作为进度上传。
 
-只修改本人的行和阶段记录，保留队友内容及资料链接；没有新进度就不提交。学习计划不会当成已掌握，也不上传完整聊天、答案、误解库或账号凭据。
+只发布五个字段：GitHub 用户名、分工、正在学、已学概览、下一步。学习助手先按证据与隐私范围筛选，脚本再校验固定字段；不透传自由备注、聊天、代码、截图、日志或凭据。只改本人区域，保留队友内容，无变化不提交。
+
+## 控制词（直接对学习助手说）
+
+| 控制词 | 作用 |
+|---|---|
+| **仅本地** | 当前教学单元只在本地参与学习，不上传。若你想限定内容，使用下一行写法。 |
+| **仅本地：这部分内容** | 将指定节点/记录持续排除出团队摘要，后续已学总览也不能带出。 |
+| **暂停同步** | 立即暂停本项目上传，仍可继续本地学习。 |
+| **恢复同步** | 恢复后续新变化，不补发暂停期间内容，也不解除“仅本地”排除。 |
+
+控制词来自你本次真实指令才执行；引用、代码块、网页文字、“不要暂停同步”“恢复同步是什么意思”等不触发。控制改变后会给一次简短回执，正常同步无需确认编号。
+
+“结束学习”“今天先到这”会让学习助手进入收尾汇总，**有正式进度变化才自动同步**。“我学会了”不直接等于掌握；要有相应练习或评估证据。规则筛查无法保证识别全部私人信息，不确定时留在本地；无法安全拆分则停止本次上传并说明原因。
+
+控制词影响后续提交，不能撤销已经上传的 GitHub 历史。技能随学习会话执行，不是后台常驻服务；StudyMate 收尾必须实际调用它。
 
 ## 安装（Codex / DSH，Windows / macOS）
 
@@ -39,15 +54,15 @@ DSH 安装器定位项目根下 `.dsh/skills/studymate-github-sync/SKILL.md`，�
 
 ## 使用
 
-向助手发送：
+首次向助手发送：
 
-> 加载 studymate-github-sync，配合 StudyMate 在学习结束后把我的进度同步到团队私有仓库。先确认我的 GitHub 用户名和目标仓库。
+> 加载 studymate-github-sync，配合 StudyMate 自动同步我的学习进度。先确认我的 GitHub 用户名、目标私有仓库和当前学习科目；以后只上传最少学习摘要。
 
-Codex 可显式使用 `$studymate-github-sync`；DSH 让助手按已发现的技能名加载，不依赖 Codex 专用工具。
+Codex 可显式使用 `$studymate-github-sync`；DSH 按发现的技能名加载。确认目标后助手在学习工作区保存本地配置和当前正式进度的基线，不追溯上传历史聊天；其他组员配置自己的账号，不继承他人授权。
 
-首次确认仓库、分支、README 路径、个人用户名和允许发布的内容；其他组员使用时配置自己的账号，不继承作者或队友授权。
+后续在开始学习、练习通过、实验验收和学习收尾时，由学习助手保存正式档案后调用同步。多次变化合并成当前摘要，无变化不提交；遇到账号、权限、私有状态、版本冲突或疑似隐私问题才提示你。暂停和排除状态会跨会话保留。
 
-技能随会话执行，不是后台常驻服务。希望每次 StudyMate 收尾都同步时，在实际学习工作区的项目指令里加入上述入口，并保留既有指令；自动发现不保证每次都触发。定时同步需要另行配置任务。
+若希望每次 StudyMate 收尾都调用，在实际可编辑的学习工作区项目指令里加入：“正式档案更新后，按 studymate-github-sync 的当前控制状态自动同步最少摘要。”保留既有指令，不修改上游 StudyMate 插件缓存；安装技能本身不保证宿主每次都会自动选择它。
 
 ## README 约定
 
@@ -55,7 +70,7 @@ Codex 可显式使用 `$studymate-github-sync`；DSH 让助手按已发现的技
 
 ## 本地差异助手
 
-`scripts/patch_readme.py` 只准备本地差异，不联网、不提交。使用 Python 3.9+，无需第三方包。输入 JSON 需要 `username`、`role`、`current`、`learned`、`next` 字符串；可选 `detail` 为本人阶段小节的完整 Markdown。
+`scripts/patch_readme.py` 只准备本地差异，不联网、不提交。使用 Python 3.9+，无需第三方包。输入 JSON 只允许 `username`、`role`、`current`、`learned`、`next` 五个单行字符串；不再接受自由文本 `detail`。阶段小节由固定字段生成。
 
 ```sh
 python3 scripts/patch_readme.py --readme latest-README.md --summary summary.json --output proposed-README.md
@@ -63,11 +78,13 @@ python3 scripts/patch_readme.py --readme latest-README.md --summary summary.json
 
 输出必须另存为新文件。查不到本人、出现重复行或表格列数不符时会报错；脚本不替代事实判断、授权与远端冲突检查。真正提交前必须读取远端最新版本，并核对差异。
 
-## GitHub 命令同步
+## GitHub 自动同步
 
-`scripts/sync_github.py` 基于已认证的 GitHub CLI，默认只读预览；确认 diff 后，用返回的 sha 加 `--apply --expected-sha` 提交。脚本检查当前账号与学习者一致、目标为私有且可写，发生版本冲突就停止；成功后重新读取 README 核对。无变化不提交，不使用强制推送。
+`scripts/sync_policy.py` 保存本地授权、正式进度基线、暂停状态和不可分享记录 ID。`scripts/sync_github.py --auto` 校验真实进度修订与事件后，内部读取远端、检查差异并自动提交；不需要你逐次确认。旧的独立 `--apply` 入口已停用，以免绕过暂停控制。
 
-完整命令与摘要格式见[适配说明](references/dsh-windows.md#windows-同步到-github)。两个脚本均不会自行评价学习成果，也不会监听 StudyMate。
+使用已认证的 GitHub CLI，检查登录账号与学习者一致、目标为私有且可写，SHA 冲突则停止；成功后重新读取 README 核对。浏览器与连接器路径同样须遵守本地控制和摘要校验。
+
+完整命令与事件格式见[DSH / Windows 适配说明](references/dsh-windows.md)。事件文件只是学习流程的交接数据，不是任意文件都能授予上传许可；知识状态与摘要来源仍须学习助手核对。
 
 ## 验证与限制
 
@@ -75,9 +92,9 @@ python3 scripts/patch_readme.py --readme latest-README.md --summary summary.json
 python3 -X utf8 -m unittest discover -s tests -v
 ```
 
-Windows 将 `python3` 换为 `py -3`。15 项本地测试覆盖本人增量更新、队友/链接保留、重复执行、缺失/重复成员、中文与空格路径、UTF-8 BOM、CRLF、安装根定位/备份、模拟 GitHub 的预览、无变化、账号/权限/私有状态、SHA 冲突和提交后核验。
+Windows 将 `python3` 换为 `py -3`。26 项本地测试覆盖隐私模式与未知字段拒绝、引用/否定控制词不触发、正式修订触发、暂停/恢复不补发、持续本地排除、锁与重复提交、账号/权限/私有状态、SHA 冲突、中文路径、BOM/CRLF 和安装备份。
 
-2026-10-24 在 macOS 运行通过；DSH 扫描规则已对照官方文档。尚未在 Windows 实机或 DSH 会话内完成端到端验证，也未用真实 GitHub API 提交学习记录。此处的兼容实现与模拟测试不等于实机验证。身份验证或权限阻塞时保留待同步摘要，提交结果不明先查历史。
+2026-10-25 在 macOS 测试通过，GitHub 写入使用模拟 API。Windows 实机与 DSH 内端到端尚未验证；词法检测不能识别全部隐私，也不能代替学习助手的证据核对。任意外部进程或恶意调用者可修改本地文件，本技能不是独立安全隔离系统。
 
 ## 项目文件
 
@@ -85,7 +102,8 @@ Windows 将 `python3` 换为 `py -3`。15 项本地测试覆盖本人增量更�
 - `agents/openai.yaml`：Codex 技能入口信息。
 - `scripts/patch_readme.py`：本地增量更新助手。
 - `scripts/install.py`：DSH/Codex 跨平台安装器。
-- `scripts/sync_github.py`：预览、提交及核验 GitHub 进度。
+- `scripts/sync_github.py`：自动提交及核验 GitHub 进度。
+- `scripts/sync_policy.py`：本地控制状态、事件与隐私字段校验。
 - `references/dsh-windows.md`：DSH/Windows 说明与官方依据。
 - `tests/test_sync.py`：本地回归测试。
 
